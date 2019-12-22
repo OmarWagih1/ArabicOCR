@@ -6,6 +6,25 @@ import shutil
 import skimage.io as io
 import matplotlib.pyplot as plt
 from skimage.exposure import rescale_intensity
+import pickle
+from scipy.signal import convolve2d
+from scipy import fftpack
+import math
+import scipy
+from PIL import Image
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.datasets import make_moons, make_circles, make_classification
+from sklearn.neural_network import MLPClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.svm import SVC
+from sklearn.gaussian_process import GaussianProcessClassifier
+from sklearn.gaussian_process.kernels import RBF
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
+from sklearn.naive_bayes import GaussianNB
+from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
+from sklearn.calibration import CalibratedClassifierCV
 
 def getVertical(verticalHist,W):
     righters = []
@@ -321,9 +340,98 @@ def numericalSort(value):
     parts[1::2] = map(int, parts[1::2])
     return parts
 
-path = 'D:\\Faculty\\_Fourth year\\pattern\\Project\\_Final'
+
+
+
+#////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+def dct2(a):
+    return scipy.fftpack.dct( scipy.fftpack.dct( a, axis=0, norm='ortho' ), axis=1, norm='ortho' )
+
+
+    
+def zigzag(matrix,rows,columns):
+    zigzagArray = []
+    solution=[[] for i in range(rows+columns-1)] 
+  
+    for i in range(rows): 
+        for j in range(columns): 
+            sum=i+j 
+            if(sum%2 ==0): 
+
+                #add at beginning 
+                solution[sum].insert(0,matrix[i][j]) 
+            else: 
+
+                #add at end of the list 
+                solution[sum].append(matrix[i][j])
+    for i in solution: 
+        for j in i:
+            zigzagArray.append(j) 
+          
+    return zigzagArray
+
+
+def Reformat_Image(img):
+
+    th = 128
+    image_size = img.shape
+    width = image_size[1]
+    height = image_size[0]
+    img = Image.fromarray(img)
+    #show_images([np.asarray(img)],["whatever"]) 
+    background = Image.new('RGB', (32, 32), (255, 255, 255))
+    offset = (int(round(((32 - width) / 2), 0)), int(round(((32 - height) / 2),0)))
+
+    background.paste(img, offset)
+    background = np.asarray(background)
+    background = background[:,:,0]
+    #show_images([background],["whatever"])
+    binarizedImg = (background > th)
+    return binarizedImg
+
+
+def Extract_Features_DCT(img):
+    imgDCT = dct2(img)
+    rows,columns = imgDCT.shape
+    array = zigzag(imgDCT,rows,columns)
+    feature = array[:150:1]
+    #feature = np.asarray(feature)
+    return feature
+
+def Classifier(model_name):
+    loaded_model = pickle.load(open(model_name, 'rb'))
+    return loaded_model
+
+def Get_Labels(path):
+    labels = []
+    for file_name in os.listdir(path):
+        labels.append(str(file_name))
+    labels = np.asarray(labels)
+    return labels
+
+def Post_Processing(text):
+    text = text.replace("sss", "س")
+    re.sub(r's*s','ش',text)
+    text = text.replace("s","")
+    text = text.replace("m","")
+    return text
+
+#model = Classifier("D:\\CMP\\College\\4thYear\\Pattern Recognition\\Project\\Project\\ArabicOCR\\Models\\Neural Net")
+#model = Classifier("D:\\CMP\\College\\4thYear\\Pattern Recognition\\Project\\Project\\ArabicOCR\\Models\\Naive Bayes")
+#model = Classifier("D:\\CMP\\College\\4thYear\\Pattern Recognition\\Project\\Project\\ArabicOCR\\Models\\Linear SVM")
+#model = Classifier("D:\\CMP\\College\\4thYear\\Pattern Recognition\\Project\\Project\\ArabicOCR\\Models\\Nearest Neighbors")
+model = Classifier("D:\\CMP\\College\\4thYear\\Pattern Recognition\\Project\\Project\\ArabicOCR\\Models\\RBF SVM")
+
+
+labels = Get_Labels("D:\\CMP\\College\\4thYear\\Pattern Recognition\\Project\\Project\\\ArabicOCR\\Letters")
+
+
+path = "D:\\CMP\\College\\4thYear\\Pattern Recognition\\Project\\Project\\test"
 
 os.chdir(path)
+
+
+
 
 for i, infile in enumerate(sorted(glob.glob('*.png'), key=numericalSort)):
     img = cv2.imread(str(infile))
@@ -335,16 +443,20 @@ for i, infile in enumerate(sorted(glob.glob('*.png'), key=numericalSort)):
         letters_segmented = segment_characters(cv2.cvtColor(word_Segmented, cv2.COLOR_BGR2GRAY))
         
         for letter_segmented in reversed(letters_segmented):
-            
-            #WALID : place character segmentation here then add it instead of the R
-            OCR_Text += "R"
+            resized_img = Reformat_Image(letter_segmented)
+            feature = Extract_Features_DCT(resized_img)
+            feature = np.asarray(feature)
+            predict_probablity = model.predict_proba([feature])
+            predict_probablity = np.asarray(predict_probablity)
+            max_value = np.amax(predict_probablity)
+            index_of_max_value = np.where(predict_probablity == max_value)[1][0]
+            written_letter = labels[index_of_max_value]
+            OCR_Text += written_letter
             pass
         
-        OCR_Text += " "     #Placing space after a word Don't change ya Walid
-
-
-    f = open(str(infile)[:-3] + ".txt", "w")
+        OCR_Text += " "     
+        
+    OCR_Text = Post_Processing(OCR_Text)
+    f = open(str(infile)[:-4] + ".txt", "w",encoding='utf-8')
     f.write(OCR_Text)
     f.close()
-    
-
